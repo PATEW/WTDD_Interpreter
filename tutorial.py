@@ -1,4 +1,6 @@
-INTEGER, MINUS, PLUS, EOF = 'INTEGER', 'MINUS', 'PLUS', 'EOF'
+INTEGER, PLUS, MINUS, MUL, DIV, EOF = (
+        "INTEGER", "PLUS", "MINUS", "MUL", "DIV", "EOF"
+)
 
 
 class Token(object):
@@ -16,15 +18,14 @@ class Token(object):
         return self.__str__()
 
 
-class Interpreter(object):
+class Lexer(object):
     def __init__(self, text):
         self.text = text
         self.pos = 0
-        self.current_token = None
         self.current_char = self.text[self.pos]
 
     def error(self):
-        raise Exception("Error parsing input")
+        raise Exception("Invalid Character")
 
     def advance(self):
         # advance pos pointer and set current_char
@@ -48,7 +49,6 @@ class Interpreter(object):
 
     # breaks apart sentence into tokens one at a time
     def get_next_token(self):
-        # Lexer (aka tokenizer)
         while self.current_char is not None:
 
             if self.current_char.isspace():
@@ -66,29 +66,72 @@ class Interpreter(object):
                 self.advance()
                 return Token(MINUS, '-')
 
+            if self.current_char == '*':
+                self.advance()
+                return Token(MUL, '*')
+
+            if self.current_char == '/':
+                self.advance()
+                return Token(DIV, '/')
+
             # nothing found
             self.error()
 
         return Token(EOF, None)
 
-    # compare current token with passed token
-    # if type matches, 'eat' the token
-    # and assign next token to self.current_token
+
+class Interpreter(object):
+    def __init__(self, lexer):
+        self.lexer = lexer
+        # set current token to the first token taken from the input
+        self.current_token = self.lexer.get_next_token()
+
+    def error(self):
+        raise Exception('Invalid syntax')
+
     def eat(self, token_type):
+        # compare the current token type with the passed token
+        # type and if they match then "eat" the current token
+        # and assign the next token to the self.current_token,
+        # otherwise raise an exception.
         if self.current_token.type == token_type:
-            self.current_token = self.get_next_token()
+            self.current_token = self.lexer.get_next_token()
         else:
             self.error()
 
-    def term(self):
+    def factor(self):
+        """factor : INTEGER"""
         token = self.current_token
         self.eat(INTEGER)
         return token.value
 
-    def expression(self):
-        self.current_token = self.get_next_token()
+    def term(self):
+        """term : factor ((MUL | DIV) factor)*"""
+        result = self.factor()
 
+        while self.current_token.type in (MUL, DIV):
+            token = self.current_token
+            if token.type == MUL:
+                self.eat(MUL)
+                result = result * self.factor()
+            elif token.type == DIV:
+                self.eat(DIV)
+                result = result / self.factor()
+
+        return result
+
+    def expression(self):
+        """Arithmetic expression parser / interpreter.
+
+        calc>  14 + 2 * 3 - 6 / 2
+        17
+
+        expr   : term ((PLUS | MINUS) term)*
+        term   : factor ((MUL | DIV) factor)*
+        factor : INTEGER
+        """
         result = self.term()
+
         while self.current_token.type in (PLUS, MINUS):
             token = self.current_token
             if token.type == PLUS:
@@ -97,10 +140,6 @@ class Interpreter(object):
             elif token.type == MINUS:
                 self.eat(MINUS)
                 result = result - self.term()
-        # basically the above loop ensures that either:
-        # 1. current token is a number
-        # 2. current token is an operator, then take a number after
-        # (expression cannot end on an operator)
 
         return result
 
@@ -113,7 +152,8 @@ def main():
             break
         if not text:
             continue
-        interpreter = Interpreter(text)
+        lexer = Lexer(text)
+        interpreter = Interpreter(lexer)
         result = interpreter.expression()
         print(result)
 
